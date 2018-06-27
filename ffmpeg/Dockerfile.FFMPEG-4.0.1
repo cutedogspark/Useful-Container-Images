@@ -1,0 +1,194 @@
+FROM alpine:3.7
+
+LABEL maintainer "Ming-Jui Chen<cutedogspark@gmail.com>"
+
+WORKDIR /tmp
+
+ENV     FFMPEG_VERSION=4.0.1                            \
+        FDKAAC_VERSION=0.1.6                            \
+        LAME_VERSION=3.100                              \
+        OPENCOREAMR_VERSION=0.1.5                       \
+        THEORA_VERSION=1.1.1                            \
+        X264_VERSION=20180531-2245                      \
+        X265_VERSION=2.8                                \
+        OGG_VERSION=1.3.3                               \
+        PKG_CONFIG_VERSION=0.29.2                       \
+        VID_STAB_VERSION=1.1.0                          \
+        VORBIS_VERSION=1.3.6                            \
+        VPX_VERSION=1.7.0                               \
+        NASM_VERSION=2.13.03                            \
+        FREETYPE_VERSION=2.5.5                          \
+        OPUS_VERSION=1.2                                \
+        XVID_VERSION=1.3.4                              \
+        PKG_CONFIG_PATH=/usr/local/lib/pkgconfig        \
+        SRC=/usr/local
+
+RUN     buildDeps="make \
+                gcc \
+                libc-dev \
+                openssl-dev \
+                pcre-dev \
+                zlib-dev \
+                linux-headers \
+                curl \
+                gnupg \
+                wget \
+                libxslt-dev \
+                gd-dev \
+                geoip-dev \
+                autoconf \
+                automake \
+                bash \
+                binutils \
+                bzip2 \
+                cmake \
+                coreutils \
+                g++ \
+                libtool \
+                python \
+                tar \
+                yasm \
+                libdrm-dev \
+                libgcc \
+                libstdc++ \
+                ca-certificates \
+                libgomp \
+                libdrm \
+                openssl \
+                iputils \
+                git \
+                diffutils " \
+        && export MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+        && apk update \
+        && apk add --virtual .build-deps ${buildDeps} \
+        && echo "[Build] fdk-aac" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://github.com/mstorsjo/fdk-aac/archive/v${FDKAAC_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && autoreconf -fiv && ./configure --prefix="${SRC}" --disable-shared --enable-static --datadir="${DIR}" \
+        && make ${MAKEFLAGS} && make install && make distclean && rm -rf ${DIR} \
+        && echo "[Build] libmp3lame" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://jaist.dl.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --bindir="${SRC}/bin" --disable-shared --enable-static --enable-nasm --datarootdir="${DIR}" \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] opencore-amr" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://jaist.dl.sourceforge.net/project/opencore-amr/opencore-amr/opencore-amr-${OPENCOREAMR_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --bindir="${SRC}/bin" --disable-shared --enable-static \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] ogg" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://downloads.xiph.org/releases/ogg/libogg-${OGG_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --bindir="${SRC}/bin" --disable-shared --enable-static --datarootdir=${DIR} \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] libtheora" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://ftp.osuosl.org/pub/xiph/releases/theora/libtheora-${THEORA_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && sed "s/-fforce-addr//g" configure > configure.patched \
+        && chmod +x configure.patched && mv configure.patched configure \
+        && ./configure --prefix="${SRC}" --with-ogg="${SRC}" --bindir="${SRC}/bin" --enable-static --disable-shared --disable-oggtest --disable-vorbistest --disable-examples --disable-asm \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] pkg-config" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://pkgconfig.freedesktop.org/releases/pkg-config-${PKG_CONFIG_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --silent --prefix="${SRC}" --bindir="${SRC}/bin" --with-pc-path="${SRC}/lib/pkgconfig" --with-internal-glib \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] vid_stab" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://github.com/georgmartius/vid.stab/archive/v${VID_STAB_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && cmake . && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] Bbvuild liorbis" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://downloads.xiph.org/releases/vorbis/libvorbis-${VORBIS_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --with-ogg="${SRC}" --bindir="${SRC}/bin" --enable-static --disable-shared --disable-oggtest --datadir="${DIR}" \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] libvpx" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://github.com/webmproject/libvpx/archive/v${VPX_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --enable-vp8 --enable-vp9 --enable-pic --disable-debug --disable-examples --disable-docs --disable-install-bins --disable-shared \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] nasm" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://www.nasm.us/pub/nasm/releasebuilds/${NASM_VERSION}/nasm-${NASM_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --disable-shared --enable-static \
+        && make ${MAKEFLAGS} && make install && rm -rf ${DIR} \
+        && echo "[Build] x264" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sLk https://ftp.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-${X264_VERSION}.tar.bz2 | tar -jx --strip-components=1 \
+        && ./configure --prefix="${SRC}" --bindir="${SRC}/bin" --enable-pic --enable-static \
+        && make ${MAKEFLAGS} && make install && make install-lib-static && rm -rf ${DIR} \
+        && echo "[Build] x265" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sLk https://download.videolan.org/pub/videolan/x265/x265_${X265_VERSION}.tar.gz | tar -zx \
+        && cd x265_${X265_VERSION}/build/linux \
+        && ./multilib.sh \
+        && make -C 8bit install \
+        && rm -rf ${DIR} \
+        && echo "[Build] freetype" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && ./configure --disable-shared --enable-static \
+        && make ${MAKEFLAGS} && make install && make distclean && rm -rf ${DIR} \
+        && echo "[Build] libopus" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && autoreconf -fiv \
+        && ./configure --prefix="${SRC}" --disable-shared --enable-static --datadir="${DIR}" \
+        && make && make install && rm -rf ${DIR} \
+        && echo "[Build] xvid" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sL http://downloads.xvid.org/downloads/xvidcore-${XVID_VERSION}.tar.gz | tar -zx --strip-components=1 \
+        && cd build/generic \
+        && ./configure --prefix="${SRC}" --bindir="${SRC}/bin" --datadir="${DIR}" --disable-shared --enable-static  \
+        && make && make install && rm -rf ${DIR} \
+        && echo "[Build] ffmpeg" && DIR=$(mktemp -d) && cd ${DIR} \
+        && curl -sLO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.gz \
+        && ls -lha \
+        && tar -zx --strip-components=1 -f ffmpeg-${FFMPEG_VERSION}.tar.gz \
+        && ./configure \
+        --prefix="${SRC}" \
+        --pkgconfigdir="${SRC}/lib/pkgconfig" \
+        --pkg-config-flags="--static" \
+        --extra-cflags="-I${SRC}/include" \
+        --extra-ldflags="-L${SRC}/lib" \
+        --extra-libs="-lpthread -lm -ldl" \
+          --enable-static \
+          --disable-debug \
+          --disable-shared \
+          --disable-ffplay \
+          --disable-doc \
+          --enable-gpl \
+          --enable-version3 \
+          --enable-nonfree \
+          --enable-pthreads \
+          --enable-libvpx \
+          --enable-libmp3lame \
+          --enable-libtheora \
+          --enable-libvorbis \
+          --enable-libx264 \
+          --enable-libx265 \
+          --enable-runtime-cpudetect \
+          --enable-libfdk-aac \
+          --enable-avfilter \
+          --enable-libopencore_amrwb \
+          --enable-libopencore_amrnb \
+          --enable-filters \
+          --enable-libvidstab \
+          --enable-libfreetype \
+          --enable-libopus \
+          --enable-libxvid \
+          --enable-openssl \
+          --enable-postproc \
+          --enable-small \
+        && make ${MAKEFLAGS} && make install && make distclean && hash -r \
+        && cd tools && make qt-faststart && cp qt-faststart ${SRC}/bin \
+        && rm -rf ${DIR} \
+        && echo "Cleanup" \
+        && apk add --no-cache --virtual .gettext gettext \
+        && mv /usr/bin/envsubst /tmp/ \
+        && runDeps="$( \
+                scanelf --needed --nobanner \
+                /usr/local/bin/ffmpeg \
+                /tmp/envsubst \
+                | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+                | sort -u \
+                | xargs -r apk info --installed \
+                | sort -u \
+        ) supervisor bash libgomp curl libgcc libstdc++ libdrm openssl iputils ca-certificates" \
+        && apk add --no-cache --virtual .rundeps $runDeps \
+        && apk del .build-deps \
+        && apk del .gettext \
+        && mv /tmp/envsubst /usr/local/bin/ \
+        && rm -rf /var/cache/apk/* /tmp/* \
+        && ffmpeg -buildconf
+
+WORKDIR /tmp
+
+COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

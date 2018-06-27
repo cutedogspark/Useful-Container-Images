@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if [ -n "$KONG_MIGRATION_AUTO" ]; then
+	kong migrations up
+fi
+
+if [ -n "$CUSTOM_MIGRATION" ] && [ $KONG_DATABASE = 'postgres' ]; then
+	echo "Custom migrations .... "
+	if [ -z "$CUSTOM_MIGRATION_DIR" ]; then
+		CUSTOM_MIGRATION_DIR="/migrations/"
+	fi
+  echo "folder .... $CUSTOM_MIGRATION_DIR"
+
+  if [ -z "$KONG_PG_PORT" ]; then
+	  KONG_PG_PORT=5432
+  fi
+  migrate -verbose -database "postgres://$KONG_PG_USER:$KONG_PG_PASSWORD@$KONG_PG_HOST:$KONG_PG_PORT/kong?sslmode=disable&x-migrations-table=custom-migrations" -path "$CUSTOM_MIGRATION_DIR" up
+fi

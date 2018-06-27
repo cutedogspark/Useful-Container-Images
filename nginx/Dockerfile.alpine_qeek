@@ -1,0 +1,87 @@
+FROM alpine:3.6
+
+MAINTAINER "Ming-Jui Chen"  <cutedogspark@gmail.com>
+
+WORKDIR /tmp
+
+ENV     NGINX_VERSION=1.13.3 \
+        NGINX_RTMP_MODULE_VERSION=1.2.0-qeek
+
+RUN     buildDeps="make \
+                    gcc \
+                    libc-dev \
+                    openssl-dev \
+                    pcre-dev \
+                    zlib-dev \
+                    linux-headers \
+                    curl \
+                    gnupg \
+                    wget \
+                    libxslt-dev \
+                    gd-dev \
+                    geoip-dev " \
+                    && export MAKEFLAGS="-j$(($(grep -c ^processor /proc/cpuinfo) + 1))" \
+                    && apk update \
+                    && apk add --no-cache --virtual .build-deps ${buildDeps} \
+                    && addgroup -S nginx \
+                    && adduser -D -S -h /var/cache/nginx -s /sbin/ash -G nginx nginx \
+    && echo "Build Nginx & RTMP module" \
+    && wget -O nginx-${NGINX_VERSION}.tar.gz https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    && tar -zxf nginx-${NGINX_VERSION}.tar.gz \
+    && wget -O nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION}.tar.gz https://github.com/qeek-dev/nginx-rtmp-module/archive/v${NGINX_RTMP_MODULE_VERSION}.tar.gz \
+    && tar -zxf nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION}.tar.gz \
+    && cd nginx-${NGINX_VERSION} \
+    && ./configure \
+    --user=nginx \
+    --group=nginx \
+    --add-module=../nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION} \
+    --with-http_ssl_module \
+    --with-http_xslt_module \
+    --with-http_realip_module \
+    --with-http_addition_module \
+    --with-http_sub_module \
+    --with-http_flv_module \
+    --with-http_mp4_module \
+    --with-http_gunzip_module \
+    --with-http_gzip_static_module \
+    --with-http_random_index_module \
+    --with-http_secure_link_module \
+    --with-http_stub_status_module \
+    --with-http_dav_module \
+    --with-http_auth_request_module \
+    --with-mail \
+    --with-mail_ssl_module \
+    --with-file-aio \
+    --with-threads \
+    --with-stream \
+    --with-stream_ssl_module \
+    --with-stream_realip_module \
+    --with-http_slice_module \
+    --with-http_v2_module \
+    && make ${MAKEFLAGS} && make install \
+    && echo "Cleanup" \
+    && apk add --no-cache --virtual .gettext gettext \
+    && mv /usr/bin/envsubst /tmp/ \
+    && runDeps="$( \
+        scanelf --needed --nobanner \
+            /usr/local/nginx/sbin/nginx \
+            /usr/local/nginx/modules/*.so \
+            /tmp/envsubst \
+            | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+            | sort -u \
+            | xargs -r apk info --installed \
+            | sort -u \
+    ) supervisor " \
+    && apk add --no-cache --virtual .nginx-rundeps $runDeps \
+    && apk del .build-deps \
+    && apk del .gettext \
+    && mv /tmp/envsubst /usr/local/bin/ \
+    && rm -rf /var/cache/apk/* /tmp/*
+
+COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY static/crossdomain.xml /usr/local/nginx/html/
+COPY static/stat_qeek.xsl /usr/local/nginx/html/stat.xsl
+
+EXPOSE 1935 80 443
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
